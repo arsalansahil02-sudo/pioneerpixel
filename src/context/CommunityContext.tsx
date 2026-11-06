@@ -192,7 +192,33 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // 1. Initial Cloud Sync: Fetch live students
     fetchStudentsFromCloud().then((cloudStudents) => {
       if (cloudStudents && cloudStudents.length > 0) {
-        setStudents(cloudStudents);
+        // Auto-migration: Check if this user or student signed up locally before Supabase was connected
+        let localStudents: StudentProfile[] = [];
+        try {
+          const stored = localStorage.getItem(`${STORAGE_KEY}_students`);
+          if (stored) localStudents = JSON.parse(stored);
+        } catch (e) {
+          console.warn('Error reading local students', e);
+        }
+
+        const missingFromCloud = localStudents.filter(
+          (loc) =>
+            loc.id !== 'pioneerpixel-host-admin' &&
+            loc.email.toLowerCase() !== HOST_ADMIN_EMAIL &&
+            !cloudStudents.some(
+              (cs) => cs.id === loc.id || cs.email.toLowerCase() === loc.email.toLowerCase()
+            )
+        );
+
+        if (missingFromCloud.length > 0) {
+          // Upload any student who registered locally before the cloud was connected!
+          missingFromCloud.forEach((stu) => {
+            syncStudentToCloud(stu);
+          });
+          setStudents([...missingFromCloud, ...cloudStudents]);
+        } else {
+          setStudents(cloudStudents);
+        }
       } else {
         // First time initialization in Cloud: upload host admin
         syncStudentToCloud(HOST_ADMIN);
