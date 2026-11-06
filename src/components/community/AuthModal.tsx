@@ -1,0 +1,331 @@
+import React, { useState } from 'react';
+import {
+  X,
+  Shield,
+  User,
+  AlertCircle,
+  Sparkles,
+  Lock,
+  Eye,
+  EyeOff,
+  Mail,
+} from 'lucide-react';
+import { useCommunity } from '../../hooks/useCommunity';
+
+interface AuthModalProps {
+  isOpen: boolean;
+  initialMode: 'signin' | 'signup';
+  onClose: () => void;
+  onRegisteredSuccess?: () => void;
+}
+
+export const AuthModal: React.FC<AuthModalProps> = ({
+  isOpen,
+  initialMode,
+  onClose,
+  onRegisteredSuccess,
+}) => {
+  const { login, signup, switchUser, students } = useCommunity();
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+
+  // Sign In state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
+  // Sign Up state: Name, Gmail/Email, and Password
+  const [signupName, setSignupName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const result = login(loginEmail, loginPassword);
+    if (result.success) {
+      onClose();
+    } else {
+      setError(result.error || 'Login failed');
+    }
+  };
+
+  const handleSignUp = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!signupName.trim() || !signupEmail.trim() || !signupPassword.trim()) {
+      setError('Please provide your name, gmail/email, and password.');
+      return;
+    }
+
+    if (signupPassword.trim().length < 4) {
+      setError('Password should be at least 4 characters long.');
+      return;
+    }
+
+    // Register as Student with Name, Gmail, Password
+    const result = signup(
+      signupName.trim(),
+      signupEmail.trim(),
+      signupPassword.trim()
+    );
+
+    if (result.success) {
+      onClose();
+      // Prompt user to complete their profile
+      if (onRegisteredSuccess) {
+        onRegisteredSuccess();
+      }
+    } else {
+      setError(result.error || 'Registration failed');
+    }
+  };
+
+  const handleQuickLogin = (userId: string) => {
+    switchUser(userId);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="relative w-full max-w-md rounded-3xl bg-[#FFFFFF] border border-[#E5E7EB] p-6 sm:p-8 text-[#080808] shadow-2xl">
+        <button
+          onClick={onClose}
+          type="button"
+          className="absolute top-5 right-5 text-[#666666] hover:text-[#080808] cursor-pointer"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Header Tabs */}
+        <div className="flex items-center gap-4 pb-4 border-b border-[#E5E7EB] mb-6">
+          <button
+            onClick={() => {
+              setMode('signin');
+              setError(null);
+            }}
+            type="button"
+            className={`text-base font-bold pb-1 cursor-pointer transition-colors ${
+              mode === 'signin'
+                ? 'text-[#080808] border-b-2 border-[#080808]'
+                : 'text-[#888888] hover:text-[#080808]'
+            }`}
+          >
+            Student Login
+          </button>
+          <button
+            onClick={() => {
+              setMode('signup');
+              setError(null);
+            }}
+            type="button"
+            className={`text-base font-bold pb-1 cursor-pointer transition-colors ${
+              mode === 'signup'
+                ? 'text-[#080808] border-b-2 border-[#080808]'
+                : 'text-[#888888] hover:text-[#080808]'
+            }`}
+          >
+            New Registration
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-[#FEF2F2] border border-[#FCA5A5] text-xs text-[#991B1B] flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-[#DC2626]" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* SIGN IN FORM */}
+        {mode === 'signin' ? (
+          <form onSubmit={handleSignIn} className="space-y-4 text-xs">
+            <div>
+              <label className="block text-[10px] uppercase font-mono text-[#666666] mb-1 font-semibold flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-[#080808]" />
+                <span>Registered Email / Gmail</span>
+              </label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                required
+                placeholder="e.g. arsalansahil02@gmail.com or rahul@gmail.com"
+                className="w-full px-3 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#D1D5DB] text-xs text-[#080808] focus:outline-none focus:border-[#080808]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-mono text-[#666666] mb-1 font-semibold flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-[#080808]" />
+                <span>Password</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showLoginPassword ? 'text' : 'password'}
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full pl-3 pr-10 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#D1D5DB] text-xs text-[#080808] focus:outline-none focus:border-[#080808]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#888888] hover:text-[#080808] cursor-pointer"
+                >
+                  {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2.5 rounded-xl bg-[#080808] text-white font-bold hover:bg-[#222222] cursor-pointer shadow-sm transition-colors text-xs"
+            >
+              Sign In to PioneerPixel
+            </button>
+
+            {/* Registered Accounts Quick Select */}
+            <div className="pt-4 border-t border-[#E5E7EB]">
+              {students.length > 0 ? (
+                <>
+                  <div className="text-[10px] font-mono uppercase text-[#666666] mb-2 text-center font-semibold">
+                    Available Accounts ({students.length}):
+                  </div>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {students.map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => handleQuickLogin(st.id)}
+                        className="w-full text-left p-2.5 rounded-xl bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-between text-xs cursor-pointer shadow-xs transition-colors"
+                      >
+                        <span className="flex items-center gap-2 font-medium">
+                          {st.role === 'admin' ? (
+                            <Shield className="w-3.5 h-3.5 text-[#080808]" />
+                          ) : (
+                            <User className="w-3.5 h-3.5 text-[#080808]" />
+                          )}
+                          <span className="text-[#080808] font-bold">{st.name}</span>
+                          <span className="text-[9px] font-mono px-1 rounded bg-[#E5E7EB] text-[#555555] uppercase">
+                            {st.id === 'pioneerpixel-host-admin' ? 'Host Admin' : st.role}
+                          </span>
+                        </span>
+                        <span className="text-[10px] font-mono text-[#666666] truncate max-w-[140px]">
+                          {st.email}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-2 text-xs text-[#666666]">
+                  <span>No student accounts registered yet. </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signup');
+                      setError(null);
+                    }}
+                    className="text-[#080808] underline font-bold cursor-pointer hover:text-black"
+                  >
+                    Register new profile
+                  </button>
+                </div>
+              )}
+            </div>
+          </form>
+        ) : (
+          /* SIGN UP FORM — NAME, GMAIL, PASSWORD */
+          <form onSubmit={handleSignUp} className="space-y-3.5 text-xs">
+            <div className="p-3 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] text-[11px] text-[#555555] flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-[#080808] shrink-0 mt-0.5" />
+              <span>
+                Enter your Name, Gmail, and Password to create your account and complete your profile.
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-mono text-[#666666] mb-1 font-semibold flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-[#080808]" />
+                <span>Full Name *</span>
+              </label>
+              <input
+                type="text"
+                value={signupName}
+                onChange={(e) => setSignupName(e.target.value)}
+                required
+                placeholder="e.g. Rahul Sharma"
+                className="w-full px-3 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#D1D5DB] text-xs text-[#080808] focus:outline-none focus:border-[#080808]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-mono text-[#666666] mb-1 font-semibold flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-[#080808]" />
+                <span>Gmail / Email Address *</span>
+              </label>
+              <input
+                type="email"
+                value={signupEmail}
+                onChange={(e) => setSignupEmail(e.target.value)}
+                required
+                placeholder="e.g. rahul.sharma@gmail.com"
+                className="w-full px-3 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#D1D5DB] text-xs text-[#080808] focus:outline-none focus:border-[#080808]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-mono text-[#666666] mb-1 font-semibold flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-[#080808]" />
+                <span>Set Password *</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showSignupPassword ? 'text' : 'password'}
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  required
+                  placeholder="Create a password (min 4 characters)"
+                  className="w-full pl-3 pr-10 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#D1D5DB] text-xs text-[#080808] focus:outline-none focus:border-[#080808]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSignupPassword(!showSignupPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#888888] hover:text-[#080808] cursor-pointer"
+                >
+                  {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2.5 rounded-xl bg-[#080808] text-white font-bold hover:bg-[#222222] cursor-pointer shadow-sm transition-colors text-xs"
+            >
+              Sign Up & Open Profile
+            </button>
+
+            <div className="text-center text-[11px] text-[#666666]">
+              Already registered?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signin');
+                  setError(null);
+                }}
+                className="text-[#080808] underline font-bold cursor-pointer"
+              >
+                Sign In
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};
