@@ -21,6 +21,20 @@ import {
   SEED_COMMUNITY_POSTS,
 } from '../data/communitySeed';
 import { CommunityContext } from './CommunityContextInstance';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import {
+  fetchStudentsFromCloud,
+  syncStudentToCloud,
+  fetchSkillGroupsFromCloud,
+  syncSkillGroupToCloud,
+  fetchCommonTaskFromCloud,
+  syncCommonTaskToCloud,
+  fetchCommunityPostsFromCloud,
+  syncCommunityPostToCloud,
+  fetchUploadRequestsFromCloud,
+  syncUploadRequestToCloud,
+  mapDbStudentToProfile,
+} from '../services/communityDatabase';
 
 const STORAGE_KEY = 'pioneerpixel_clean_v6';
 
@@ -171,6 +185,124 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     safeSetItem(`${STORAGE_KEY}_community_posts`, JSON.stringify(communityPosts));
   }, [students, currentUserId, groups, commonTask, previousTasks, uploadRequests, communityPosts]);
 
+  // Initial Cloud Data Fetch & Realtime Synchronizer
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    // 1. Initial Cloud Sync: Fetch live students
+    fetchStudentsFromCloud().then((cloudStudents) => {
+      if (cloudStudents && cloudStudents.length > 0) {
+        setStudents(cloudStudents);
+      } else {
+        // First time initialization in Cloud: upload host admin
+        syncStudentToCloud(HOST_ADMIN);
+      }
+    });
+
+    // Fetch live skill groups
+    fetchSkillGroupsFromCloud().then((cloudGroups) => {
+      if (cloudGroups && cloudGroups.length > 0) {
+        setGroups(cloudGroups);
+      }
+    });
+
+    // Fetch live common task
+    fetchCommonTaskFromCloud().then((cloudTask) => {
+      if (cloudTask && cloudTask.title) {
+        setCommonTask(cloudTask);
+      }
+    });
+
+    // Fetch live community posts
+    fetchCommunityPostsFromCloud().then((cloudPosts) => {
+      if (cloudPosts && cloudPosts.length > 0) {
+        setCommunityPosts(cloudPosts);
+      }
+    });
+
+    // Fetch live upload requests
+    fetchUploadRequestsFromCloud().then((cloudReqs) => {
+      if (cloudReqs && cloudReqs.length > 0) {
+        setUploadRequests(cloudReqs);
+      }
+    });
+
+    // 2. Realtime listener: Whenever another student signs up or updates on any device!
+    const studentsChannel = supabase
+      .channel('realtime:students')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'students' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            const newProfile = mapDbStudentToProfile(payload.new);
+            setStudents((prev) => {
+              if (prev.some((s) => s.id === newProfile.id || s.email.toLowerCase() === newProfile.email.toLowerCase())) {
+                return prev.map((s) => (s.id === newProfile.id ? newProfile : s));
+              }
+              return [newProfile, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedProfile = mapDbStudentToProfile(payload.new);
+            setStudents((prev) =>
+              prev.map((s) => (s.id === updatedProfile.id ? updatedProfile : s))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setStudents((prev) => prev.filter((s) => s.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    // 3. Realtime listener: Skill groups
+    const groupsChannel = supabase
+      .channel('realtime:skill_groups')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'skill_groups' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            const newGrp: SkillGroup = {
+              id: payload.new.id,
+              name: payload.new.name,
+              description: payload.new.description,
+              category: payload.new.category,
+              adminName: payload.new.admin_name,
+              adminId: payload.new.admin_id,
+              memberIds: payload.new.member_ids || [],
+              resources: payload.new.resources || [],
+            };
+            setGroups((prev) => (prev.some((g) => g.id === newGrp.id) ? prev : [...prev, newGrp]));
+          } else if (payload.eventType === 'UPDATE') {
+            setGroups((prev) =>
+              prev.map((g) =>
+                g.id === payload.new.id
+                  ? {
+                      ...g,
+                      name: payload.new.name,
+                      description: payload.new.description,
+                      category: payload.new.category,
+                      adminName: payload.new.admin_name,
+                      adminId: payload.new.admin_id,
+                      memberIds: payload.new.member_ids || [],
+                      resources: payload.new.resources || [],
+                    }
+                  : g
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setGroups((prev) => prev.filter((g) => g.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase?.removeChannel(studentsChannel);
+      supabase?.removeChannel(groupsChannel);
+    };
+  }, []);
+
   const currentUser = students.find((s) => s.id === currentUserId) || null;
   const isAdmin = currentUser?.role === 'admin';
 
@@ -261,6 +393,7 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     setStudents((prev) => [newStudent, ...prev]);
     setCurrentUserId(newStudent.id);
+    syncStudentToCloud(newStudent);
     return { success: true };
   };
 
@@ -278,9 +411,11 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Profile operations
   const updateProfile = (updated: Partial<StudentProfile>) => {
     if (!currentUser) return;
+    const merged = { ...currentUser, ...updated };
     setStudents((prev) =>
-      prev.map((s) => (s.id === currentUser.id ? { ...s, ...updated } : s))
+      prev.map((s) => (s.id === currentUser.id ? merged : s))
     );
+    syncStudentToCloud(merged);
   };
 
   const addSkill = (skill: Omit<StudentSkill, 'id'>) => {
@@ -358,16 +493,21 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const nextJoined = [...currentUser.joinedGroupIds, groupId];
 
     // Update student's joined groups
-    setStudents((prev) =>
-      prev.map((s) => (s.id === currentUser.id ? { ...s, joinedGroupIds: nextJoined } : s))
-    );
+    setStudents((prev) => {
+      const updated = prev.map((s) => (s.id === currentUser.id ? { ...s, joinedGroupIds: nextJoined } : s));
+      const myProfile = updated.find((s) => s.id === currentUser.id);
+      if (myProfile) syncStudentToCloud(myProfile);
+      return updated;
+    });
 
     // Update group's member list
     setGroups((prev) =>
       prev.map((g) => {
         if (g.id !== groupId) return g;
         if (g.memberIds.includes(currentUser.id)) return g;
-        return { ...g, memberIds: [...g.memberIds, currentUser.id] };
+        const merged = { ...g, memberIds: [...g.memberIds, currentUser.id] };
+        syncSkillGroupToCloud(merged);
+        return merged;
       })
     );
 
@@ -378,14 +518,19 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!currentUser) return;
     const nextJoined = currentUser.joinedGroupIds.filter((id) => id !== groupId);
 
-    setStudents((prev) =>
-      prev.map((s) => (s.id === currentUser.id ? { ...s, joinedGroupIds: nextJoined } : s))
-    );
+    setStudents((prev) => {
+      const updated = prev.map((s) => (s.id === currentUser.id ? { ...s, joinedGroupIds: nextJoined } : s));
+      const myProfile = updated.find((s) => s.id === currentUser.id);
+      if (myProfile) syncStudentToCloud(myProfile);
+      return updated;
+    });
 
     setGroups((prev) =>
       prev.map((g) => {
         if (g.id !== groupId) return g;
-        return { ...g, memberIds: g.memberIds.filter((id) => id !== currentUser.id) };
+        const merged = { ...g, memberIds: g.memberIds.filter((id) => id !== currentUser.id) };
+        syncSkillGroupToCloud(merged);
+        return merged;
       })
     );
   };
@@ -416,7 +561,12 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     setGroups((prev) =>
-      prev.map((g) => (g.id === groupId ? { ...g, resources: [newResource, ...g.resources] } : g))
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        const merged = { ...g, resources: [newResource, ...g.resources] };
+        syncSkillGroupToCloud(merged);
+        return merged;
+      })
     );
 
     return { success: true };
@@ -425,10 +575,10 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Common Task operations
   const submitCommonTask = (text: string, link?: string) => {
     if (!currentUser) return;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updated = prev.map((s) => {
         if (s.id !== currentUser.id) return s;
-        return {
+        const updatedStudent = {
           ...s,
           completedCommonTask: true,
           commonTaskSubmission: {
@@ -437,21 +587,27 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             submittedAt: 'Just now',
           },
         };
-      })
-    );
+        syncStudentToCloud(updatedStudent);
+        return updatedStudent;
+      });
+      return updated;
+    });
   };
 
   const toggleCommonTaskCompletion = () => {
     if (!currentUser) return;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updated = prev.map((s) => {
         if (s.id !== currentUser.id) return s;
-        return {
+        const updatedStudent = {
           ...s,
           completedCommonTask: !s.completedCommonTask,
         };
-      })
-    );
+        syncStudentToCloud(updatedStudent);
+        return updatedStudent;
+      });
+      return updated;
+    });
   };
 
   const archiveCurrentTask = () => {
@@ -495,6 +651,7 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     setUploadRequests((prev) => [newReq, ...prev]);
+    syncUploadRequestToCloud(newReq);
     return {
       success: true,
       message: 'Upload request submitted to Main Admin! It will be reviewed before appearing on the public feed.',
@@ -511,11 +668,13 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const updatedLikedBy = alreadyLiked
           ? post.likedBy.filter((id) => id !== currentUser.id)
           : [...post.likedBy, currentUser.id];
-        return {
+        const updatedPost = {
           ...post,
           likes: updatedLikedBy.length,
           likedBy: updatedLikedBy,
         };
+        syncCommunityPostToCloud(updatedPost);
+        return updatedPost;
       })
     );
   };
@@ -541,16 +700,26 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     setCommunityPosts((prev) => [newPost, ...prev]);
+    syncCommunityPostToCloud(newPost);
 
     // Mark request as approved
+    const updatedReq: UploadRequest = { ...req, status: 'approved' };
     setUploadRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'approved' } : r))
+      prev.map((r) => (r.id === requestId ? updatedReq : r))
     );
+    syncUploadRequestToCloud(updatedReq);
   };
 
   const rejectUploadRequest = (requestId: string, feedback?: string) => {
     setUploadRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'rejected', adminFeedback: feedback } : r))
+      prev.map((r) => {
+        if (r.id === requestId) {
+          const updatedReq: UploadRequest = { ...r, status: 'rejected', adminFeedback: feedback };
+          syncUploadRequestToCloud(updatedReq);
+          return updatedReq;
+        }
+        return r;
+      })
     );
   };
 
@@ -578,14 +747,19 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     setCommunityPosts((prev) => [newPost, ...prev]);
+    syncCommunityPostToCloud(newPost);
   };
 
   const updateCommonTask = (updated: Partial<CommonTask>) => {
-    setCommonTask((prev) => ({
-      ...prev,
-      ...updated,
-      updatedAt: 'Just now',
-    }));
+    setCommonTask((prev) => {
+      const merged = {
+        ...prev,
+        ...updated,
+        updatedAt: 'Just now',
+      };
+      syncCommonTaskToCloud(merged);
+      return merged;
+    });
   };
 
   const recordQuizCompletion = (studentId: string, earnedPoints: number) => {
@@ -594,11 +768,13 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (s.id === studentId) {
           const currentScore = s.quizScore || 0;
           const currentCount = s.quizzesCompleted || 0;
-          return {
+          const updatedStudent = {
             ...s,
             quizScore: currentScore + earnedPoints,
             quizzesCompleted: currentCount + 1,
           };
+          syncStudentToCloud(updatedStudent);
+          return updatedStudent;
         }
         return s;
       })
@@ -607,7 +783,14 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const makeStudentAdmin = (studentId: string) => {
     setStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, role: 'admin' } : s))
+      prev.map((s) => {
+        if (s.id === studentId) {
+          const updatedStudent = { ...s, role: 'admin' as const };
+          syncStudentToCloud(updatedStudent);
+          return updatedStudent;
+        }
+        return s;
+      })
     );
   };
 
@@ -615,7 +798,14 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const target = students.find((s) => s.id === studentId);
     if (studentId === 'pioneerpixel-host-admin' || target?.email.toLowerCase() === HOST_ADMIN_EMAIL) return;
     setStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, role: 'student' } : s))
+      prev.map((s) => {
+        if (s.id === studentId) {
+          const updatedStudent = { ...s, role: 'student' as const };
+          syncStudentToCloud(updatedStudent);
+          return updatedStudent;
+        }
+        return s;
+      })
     );
   };
 
@@ -633,6 +823,7 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       resources: [],
     };
     setGroups((prev) => [...prev, newGroup]);
+    syncSkillGroupToCloud(newGroup);
 
     // Admin is automatically a joined member of every group they create
     setStudents((prev) =>
