@@ -416,9 +416,13 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return { success: false, error: 'Account not found with this email. Please check or sign up.' };
     }
 
-    // Verify password strictly
-    if (found.password && found.password !== enteredPassword) {
-      return { success: false, error: 'Incorrect password. Please try again.' };
+    // Verify password strictly or set it if user originally signed up without password
+    if (!found.password) {
+      const updated = { ...found, password: enteredPassword };
+      setStudents((prev) => prev.map((s) => (s.id === found.id ? updated : s)));
+      syncStudentToCloud(updated);
+    } else if (found.password !== enteredPassword) {
+      return { success: false, error: 'Incorrect password. Please try again or use Forgot Password.' };
     }
     setCurrentUserId(found.id);
     return { success: true };
@@ -487,6 +491,47 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setStudents((prev) => [newStudent, ...prev]);
     setCurrentUserId(newStudent.id);
     syncStudentToCloud(newStudent);
+    return { success: true };
+  };
+
+  const resetPassword = (email: string, newPassword: string): { success: boolean; error?: string } => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const cleanPassword = newPassword.trim();
+
+    if (!trimmedEmail) {
+      return { success: false, error: 'Please enter your registered email address.' };
+    }
+
+    if (!cleanPassword || cleanPassword.length < 4) {
+      return { success: false, error: 'New password must be at least 4 characters long.' };
+    }
+
+    const found = students.find((s) => s.email.toLowerCase() === trimmedEmail);
+    if (!found) {
+      // Check if it is the host admin email
+      if (trimmedEmail === HOST_ADMIN_EMAIL) {
+        const updatedAdmin: StudentProfile = {
+          ...HOST_ADMIN,
+          password: cleanPassword,
+        };
+        setStudents((prev) => [updatedAdmin, ...prev.filter((p) => p.email.toLowerCase() !== trimmedEmail)]);
+        setCurrentUserId(updatedAdmin.id);
+        syncStudentToCloud(updatedAdmin);
+        return { success: true };
+      }
+      return { success: false, error: 'No account found with this email address. Please register.' };
+    }
+
+    const updatedUser: StudentProfile = {
+      ...found,
+      password: cleanPassword,
+    };
+
+    setStudents((prev) =>
+      prev.map((s) => (s.id === found.id ? updatedUser : s))
+    );
+    setCurrentUserId(updatedUser.id);
+    syncStudentToCloud(updatedUser);
     return { success: true };
   };
 
@@ -1071,6 +1116,7 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         isAdmin,
         login,
         signup,
+        resetPassword,
         logout,
         switchUser,
         updateProfile,

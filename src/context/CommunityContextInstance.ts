@@ -27,6 +27,7 @@ export interface CommunityContextType {
     email: string,
     password?: string
   ) => { success: boolean; error?: string };
+  resetPassword: (email: string, newPassword: string) => { success: boolean; error?: string };
   logout: () => void;
   switchUser: (userId: string) => void;
 
