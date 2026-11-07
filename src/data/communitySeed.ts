@@ -20,11 +20,7 @@ export const HOST_ADMIN: StudentProfile = {
   shortTermGoal: 'Foster college student skill growth through weekly challenges, AI leaderboard assessments, and peer skill groups.',
   toolsExperience: 'VS Code, Git & GitHub, MS Excel, Figma, Linux Terminal, Postman, Vite',
   extraCurricularSkills: 'Technical Mentorship, Workshop Organization, Public Speaking, Content Writing',
-  skills: [
-    { id: 'sk-adm-1', name: 'Web Architecture', experience: 'Advanced', status: 'Have' },
-    { id: 'sk-adm-2', name: 'Full Stack Development', experience: 'Advanced', status: 'Have' },
-    { id: 'sk-adm-3', name: 'Platform Governance', experience: 'Advanced', status: 'Have' },
-  ],
+  skills: [],
   monthlyProgress: {
     month: 'November 2026',
     skillsLearned: [],
@@ -34,10 +30,10 @@ export const HOST_ADMIN: StudentProfile = {
     updatedAt: 'Just now',
   },
   joinedGroupIds: [],
-  completedCommonTask: true,
+  completedCommonTask: false,
   joinedDate: 'Host Admin',
-  quizScore: 250,
-  quizzesCompleted: 3,
+  quizScore: 0,
+  quizzesCompleted: 0,
 };
 
 // Initial state includes the Host Admin

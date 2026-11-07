@@ -145,6 +145,10 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 name: s.name === 'PioneerPixel Admin' ? 'Arsalan Sahil' : s.name,
                 email: HOST_ADMIN_EMAIL,
                 role: 'admin' as const,
+                quizScore: 0,
+                quizzesCompleted: 0,
+                completedCommonTask: false,
+                skills: [],
                 monthlyProgress: {
                   ...s.monthlyProgress,
                   progressPercentage: 0,
