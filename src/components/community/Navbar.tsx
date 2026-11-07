@@ -31,7 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectTab,
   onOpenAuth,
 }) => {
-  const { currentUser, isAdmin, logout, switchUser, students, resetToDefaults } = useCommunity();
+  const { currentUser, isAdmin, logout, resetToDefaults } = useCommunity();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
 
@@ -223,38 +223,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                             </button>
                           )}
                         </div>
-
-                        {/* Switch Accounts if available */}
-                        {students.length > 1 && (
-                          <div className="mb-3 pt-2.5 border-t border-[#E5E7EB]">
-                            <div className="text-[10px] font-mono uppercase text-[#888888] font-semibold mb-1.5">
-                              Other Accounts ({students.length - 1}):
-                            </div>
-                            <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
-                              {students
-                                .filter((st) => st.id !== currentUser.id)
-                                .map((st) => (
-                                  <button
-                                    key={st.id}
-                                    onClick={() => {
-                                      switchUser(st.id);
-                                      setSwitcherOpen(false);
-                                    }}
-                                    type="button"
-                                    className="w-full text-left p-2 rounded-lg flex items-center justify-between text-[#080808] bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] transition-colors cursor-pointer"
-                                  >
-                                    <div className="truncate mr-2">
-                                      <div className="font-semibold text-xs text-[#080808] truncate">{st.name}</div>
-                                      <div className="text-[10px] text-[#666666] font-mono truncate">{st.email}</div>
-                                    </div>
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-white border border-[#D1D5DB] text-[#444444] uppercase shrink-0 font-mono">
-                                      {st.role}
-                                    </span>
-                                  </button>
-                                ))}
-                            </div>
-                          </div>
-                        )}
 
                         {/* Footer Actions */}
                         <div className="pt-2.5 border-t border-[#E5E7EB] flex items-center justify-between gap-2">

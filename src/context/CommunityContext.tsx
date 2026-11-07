@@ -392,13 +392,22 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Auth functions
   const login = (email: string, password?: string) => {
     const trimmed = email.trim().toLowerCase();
+    const enteredPassword = password?.trim() || '';
+
+    if (!enteredPassword) {
+      return { success: false, error: 'Password is required to sign in.' };
+    }
+
     const found = students.find((s) => s.email.toLowerCase() === trimmed);
     if (!found) {
       // If the website owner logs in before signing up, automatically provision as admin
       if (trimmed === HOST_ADMIN_EMAIL) {
+        if (enteredPassword !== 'admin' && enteredPassword !== HOST_ADMIN.password) {
+          return { success: false, error: 'Incorrect password for Admin.' };
+        }
         const ownerAdmin: StudentProfile = {
           ...HOST_ADMIN,
-          password: password?.trim() || HOST_ADMIN.password,
+          password: enteredPassword,
         };
         setStudents((prev) => [ownerAdmin, ...prev.filter((p) => p.email.toLowerCase() !== trimmed)]);
         setCurrentUserId(ownerAdmin.id);
@@ -406,8 +415,9 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       return { success: false, error: 'Account not found with this email. Please check or sign up.' };
     }
-    // Verify password if user has one configured
-    if (found.password && password && found.password !== password.trim()) {
+
+    // Verify password strictly
+    if (found.password && found.password !== enteredPassword) {
       return { success: false, error: 'Incorrect password. Please try again.' };
     }
     setCurrentUserId(found.id);

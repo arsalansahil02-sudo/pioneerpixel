@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   X,
-  Shield,
   User,
   AlertCircle,
   Sparkles,
@@ -25,7 +24,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onRegisteredSuccess,
 }) => {
-  const { login, signup, switchUser, students } = useCommunity();
+  const { login, signup } = useCommunity();
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
 
   // Sign In state
@@ -84,11 +83,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } else {
       setError(result.error || 'Registration failed');
     }
-  };
-
-  const handleQuickLogin = (userId: string) => {
-    switchUser(userId);
-    onClose();
   };
 
   return (
@@ -189,54 +183,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               Sign In to PioneerPixel
             </button>
 
-            {/* Registered Accounts Quick Select */}
-            <div className="pt-4 border-t border-[#E5E7EB]">
-              {students.length > 0 ? (
-                <>
-                  <div className="text-[10px] font-mono uppercase text-[#666666] mb-2 text-center font-semibold">
-                    Available Accounts ({students.length}):
-                  </div>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                    {students.map((st) => (
-                      <button
-                        key={st.id}
-                        type="button"
-                        onClick={() => handleQuickLogin(st.id)}
-                        className="w-full text-left p-2.5 rounded-xl bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-between text-xs cursor-pointer shadow-xs transition-colors"
-                      >
-                        <span className="flex items-center gap-2 font-medium">
-                          {st.role === 'admin' ? (
-                            <Shield className="w-3.5 h-3.5 text-[#080808]" />
-                          ) : (
-                            <User className="w-3.5 h-3.5 text-[#080808]" />
-                          )}
-                          <span className="text-[#080808] font-bold">{st.name}</span>
-                          <span className="text-[9px] font-mono px-1 rounded bg-[#E5E7EB] text-[#555555] uppercase">
-                            {st.id === 'pioneerpixel-host-admin' ? 'Host Admin' : st.role}
-                          </span>
-                        </span>
-                        <span className="text-[10px] font-mono text-[#666666] truncate max-w-[140px]">
-                          {st.email}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-2 text-xs text-[#666666]">
-                  <span>No student accounts registered yet. </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('signup');
-                      setError(null);
-                    }}
-                    className="text-[#080808] underline font-bold cursor-pointer hover:text-black"
-                  >
-                    Register new profile
-                  </button>
-                </div>
-              )}
+            <div className="pt-3 border-t border-[#E5E7EB] text-center text-[11px] text-[#666666]">
+              Don't have an account yet?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signup');
+                  setError(null);
+                }}
+                className="text-[#080808] underline font-bold cursor-pointer hover:text-black"
+              >
+                Register new profile
+              </button>
             </div>
           </form>
         ) : (
