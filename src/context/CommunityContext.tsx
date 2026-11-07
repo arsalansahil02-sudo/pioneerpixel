@@ -79,6 +79,53 @@ if (typeof window !== 'undefined') {
 
 export const HOST_ADMIN_EMAIL = 'arsalansahil02@gmail.com';
 
+// Automatically calculate monthly progress based on student's actual platform activities
+export function calculateStudentAutoProgress(student: {
+  bio?: string;
+  shortTermGoal?: string;
+  toolsExperience?: string;
+  skills?: Array<any>;
+  joinedGroupIds?: string[];
+  completedCommonTask?: boolean;
+  quizzesCompleted?: number;
+  quizScore?: number;
+  monthlyProgress?: MonthlyProgress;
+}): number {
+  let score = 0;
+
+  // 1. Profile Details (Bio / Goals / Tools) - Up to 20%
+  if (student.bio && student.bio.trim().length > 0) score += 10;
+  if (
+    (student.shortTermGoal && student.shortTermGoal.trim().length > 0) ||
+    (student.toolsExperience && student.toolsExperience.trim().length > 0)
+  ) {
+    score += 10;
+  }
+
+  // 2. Skills Portfolio (5% per skill, up to 25%)
+  const skillCount = student.skills?.length || 0;
+  score += Math.min(25, skillCount * 5);
+
+  // 3. Joined Skill Groups (12.5% per group, up to 25%)
+  const groupCount = student.joinedGroupIds?.length || 0;
+  score += Math.min(25, Math.round(groupCount * 12.5));
+
+  // 4. Weekly Common Task Challenge (20%)
+  if (student.completedCommonTask) {
+    score += 20;
+  }
+
+  // 5. Quizzes / Assessments (10%)
+  if (
+    (student.quizzesCompleted && student.quizzesCompleted > 0) ||
+    (student.quizScore && student.quizScore > 0)
+  ) {
+    score += 10;
+  }
+
+  return Math.min(100, Math.round(score));
+}
+
 export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   // Load state from localStorage or use initial clean empty state
@@ -87,7 +134,7 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const stored = localStorage.getItem(`${STORAGE_KEY}_students`);
       if (stored) {
         const parsed: StudentProfile[] = JSON.parse(stored);
-        // Purge legacy pioneerpixel admin and ensure arsalansahil02@gmail.com is configured as host admin
+        // Purge legacy pioneerpixel admin and ensure arsalansahil02@gmail.com is configured as host admin with reset progress
         const sanitized = parsed
           .filter((s) => s.email.toLowerCase() !== 'admin@pioneerpixel.com' && s.email.toLowerCase() !== 'arsalansahil@gmail.com')
           .map((s) => {
@@ -98,6 +145,12 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 name: s.name === 'PioneerPixel Admin' ? 'Arsalan Sahil' : s.name,
                 email: HOST_ADMIN_EMAIL,
                 role: 'admin' as const,
+                monthlyProgress: {
+                  ...s.monthlyProgress,
+                  progressPercentage: 0,
+                  whatLearned: '',
+                  skillsLearned: [],
+                },
               };
             }
             return s;
@@ -437,7 +490,15 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Profile operations
   const updateProfile = (updated: Partial<StudentProfile>) => {
     if (!currentUser) return;
-    const merged = { ...currentUser, ...updated };
+    const base = { ...currentUser, ...updated };
+    const autoProgress = calculateStudentAutoProgress(base);
+    const merged: StudentProfile = {
+      ...base,
+      monthlyProgress: {
+        ...base.monthlyProgress,
+        progressPercentage: autoProgress,
+      },
+    };
     setStudents((prev) =>
       prev.map((s) => (s.id === currentUser.id ? merged : s))
     );
@@ -450,34 +511,58 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       ...skill,
       id: `sk-${Date.now()}`,
     };
+    const nextSkills = [...currentUser.skills, newSkill];
+    const base = { ...currentUser, skills: nextSkills };
+    const autoProgress = calculateStudentAutoProgress(base);
+    const updatedUser: StudentProfile = {
+      ...base,
+      monthlyProgress: {
+        ...base.monthlyProgress,
+        progressPercentage: autoProgress,
+      },
+    };
     setStudents((prev) =>
-      prev.map((s) =>
-        s.id === currentUser.id ? { ...s, skills: [...s.skills, newSkill] } : s
-      )
+      prev.map((s) => (s.id === currentUser.id ? updatedUser : s))
     );
+    syncStudentToCloud(updatedUser);
   };
 
   const updateSkill = (skillId: string, updated: Partial<StudentSkill>) => {
     if (!currentUser) return;
-    setStudents((prev) =>
-      prev.map((s) => {
-        if (s.id !== currentUser.id) return s;
-        const updatedSkills = s.skills.map((sk) =>
-          sk.id === skillId ? { ...sk, ...updated } : sk
-        );
-        return { ...s, skills: updatedSkills };
-      })
+    const updatedSkills = currentUser.skills.map((sk) =>
+      sk.id === skillId ? { ...sk, ...updated } : sk
     );
+    const base = { ...currentUser, skills: updatedSkills };
+    const autoProgress = calculateStudentAutoProgress(base);
+    const updatedUser: StudentProfile = {
+      ...base,
+      monthlyProgress: {
+        ...base.monthlyProgress,
+        progressPercentage: autoProgress,
+      },
+    };
+    setStudents((prev) =>
+      prev.map((s) => (s.id === currentUser.id ? updatedUser : s))
+    );
+    syncStudentToCloud(updatedUser);
   };
 
   const removeSkill = (skillId: string) => {
     if (!currentUser) return;
+    const nextSkills = currentUser.skills.filter((sk) => sk.id !== skillId);
+    const base = { ...currentUser, skills: nextSkills };
+    const autoProgress = calculateStudentAutoProgress(base);
+    const updatedUser: StudentProfile = {
+      ...base,
+      monthlyProgress: {
+        ...base.monthlyProgress,
+        progressPercentage: autoProgress,
+      },
+    };
     setStudents((prev) =>
-      prev.map((s) => {
-        if (s.id !== currentUser.id) return s;
-        return { ...s, skills: s.skills.filter((sk) => sk.id !== skillId) };
-      })
+      prev.map((s) => (s.id === currentUser.id ? updatedUser : s))
     );
+    syncStudentToCloud(updatedUser);
   };
 
   const updateMonthlyProgress = (progress: Partial<MonthlyProgress>) => {
@@ -485,7 +570,7 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setStudents((prev) =>
       prev.map((s) => {
         if (s.id !== currentUser.id) return s;
-        return {
+        const updatedStudent: StudentProfile = {
           ...s,
           monthlyProgress: {
             ...s.monthlyProgress,
@@ -493,6 +578,8 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             updatedAt: 'Just now',
           },
         };
+        syncStudentToCloud(updatedStudent);
+        return updatedStudent;
       })
     );
   };
@@ -517,12 +604,20 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     const nextJoined = [...currentUser.joinedGroupIds, groupId];
+    const base = { ...currentUser, joinedGroupIds: nextJoined };
+    const autoProgress = calculateStudentAutoProgress(base);
+    const updatedStudent: StudentProfile = {
+      ...base,
+      monthlyProgress: {
+        ...base.monthlyProgress,
+        progressPercentage: autoProgress,
+      },
+    };
 
     // Update student's joined groups
     setStudents((prev) => {
-      const updated = prev.map((s) => (s.id === currentUser.id ? { ...s, joinedGroupIds: nextJoined } : s));
-      const myProfile = updated.find((s) => s.id === currentUser.id);
-      if (myProfile) syncStudentToCloud(myProfile);
+      const updated = prev.map((s) => (s.id === currentUser.id ? updatedStudent : s));
+      syncStudentToCloud(updatedStudent);
       return updated;
     });
 
@@ -543,11 +638,19 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const leaveGroup = (groupId: string) => {
     if (!currentUser) return;
     const nextJoined = currentUser.joinedGroupIds.filter((id) => id !== groupId);
+    const base = { ...currentUser, joinedGroupIds: nextJoined };
+    const autoProgress = calculateStudentAutoProgress(base);
+    const updatedStudent: StudentProfile = {
+      ...base,
+      monthlyProgress: {
+        ...base.monthlyProgress,
+        progressPercentage: autoProgress,
+      },
+    };
 
     setStudents((prev) => {
-      const updated = prev.map((s) => (s.id === currentUser.id ? { ...s, joinedGroupIds: nextJoined } : s));
-      const myProfile = updated.find((s) => s.id === currentUser.id);
-      if (myProfile) syncStudentToCloud(myProfile);
+      const updated = prev.map((s) => (s.id === currentUser.id ? updatedStudent : s));
+      syncStudentToCloud(updatedStudent);
       return updated;
     });
 
@@ -604,13 +707,21 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setStudents((prev) => {
       const updated = prev.map((s) => {
         if (s.id !== currentUser.id) return s;
-        const updatedStudent = {
+        const base = {
           ...s,
           completedCommonTask: true,
           commonTaskSubmission: {
             text: text.trim(),
             link: link?.trim(),
             submittedAt: 'Just now',
+          },
+        };
+        const autoProgress = calculateStudentAutoProgress(base);
+        const updatedStudent: StudentProfile = {
+          ...base,
+          monthlyProgress: {
+            ...base.monthlyProgress,
+            progressPercentage: autoProgress,
           },
         };
         syncStudentToCloud(updatedStudent);
@@ -625,9 +736,17 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setStudents((prev) => {
       const updated = prev.map((s) => {
         if (s.id !== currentUser.id) return s;
-        const updatedStudent = {
+        const base = {
           ...s,
           completedCommonTask: !s.completedCommonTask,
+        };
+        const autoProgress = calculateStudentAutoProgress(base);
+        const updatedStudent: StudentProfile = {
+          ...base,
+          monthlyProgress: {
+            ...base.monthlyProgress,
+            progressPercentage: autoProgress,
+          },
         };
         syncStudentToCloud(updatedStudent);
         return updatedStudent;
@@ -794,10 +913,18 @@ export const CommunityProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (s.id === studentId) {
           const currentScore = s.quizScore || 0;
           const currentCount = s.quizzesCompleted || 0;
-          const updatedStudent = {
+          const base = {
             ...s,
             quizScore: currentScore + earnedPoints,
             quizzesCompleted: currentCount + 1,
+          };
+          const autoProgress = calculateStudentAutoProgress(base);
+          const updatedStudent: StudentProfile = {
+            ...base,
+            monthlyProgress: {
+              ...base.monthlyProgress,
+              progressPercentage: autoProgress,
+            },
           };
           syncStudentToCloud(updatedStudent);
           return updatedStudent;

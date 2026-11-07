@@ -58,7 +58,7 @@ export const MyProfileSection: React.FC<MyProfileSectionProps> = ({
   // State for updating monthly progress modal
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [progressLearnedWhat, setProgressLearnedWhat] = useState(currentUser?.monthlyProgress.whatLearned || '');
-  const [progressPct, setProgressPct] = useState(currentUser?.monthlyProgress.progressPercentage || 50);
+  const [progressPct, setProgressPct] = useState(currentUser?.monthlyProgress.progressPercentage ?? 0);
   const [skillsLearnedTagInput, setSkillsLearnedTagInput] = useState(
     currentUser?.monthlyProgress.skillsLearned.join(', ') || ''
   );
